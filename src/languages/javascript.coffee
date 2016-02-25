@@ -17,6 +17,7 @@ STATEMENT_NODE_TYPES = [
 ]
 
 NEVER_PAREN = 100
+ALWAYS_PAREN = 14
 
 KNOWN_FUNCTIONS =
   'alert'       : {}
@@ -131,7 +132,7 @@ OPERATOR_PRECEDENCES = {
   '^': 11
   '|': 12
   '&&': 13
-  '||': 14
+  '||': ALWAYS_PAREN
 }
 
 CLASS_EXCEPTIONS = {
@@ -671,8 +672,9 @@ JavaScriptParser.parens = (leading, trailing, node, context) ->
     else
       break
 
-  unless context is null or context.type isnt 'socket' or
-      context.precedence > node.precedence
+  unless context is null or
+      context.type isnt 'socket' or
+      context.precedence > node.precedence and context.precedence isnt ALWAYS_PAREN
     leading '(' + leading()
     trailing trailing() + ')'
 
