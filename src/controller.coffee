@@ -1125,7 +1125,7 @@ hook 'mousedown', 1, (point, event, state) ->
 
   for dropletDocument, i in @getDocuments() by -1
     # First attempt handling text input
-    if @handleTextInputClick mainPoint, dropletDocument
+    if @handleTextInputMouseDown mainPoint, dropletDocument
       state.consumedHitTest = true
       return
     else if @cursor.document is i and @cursorAtSocket()
@@ -1214,6 +1214,8 @@ hook 'mouseup', 0, (point, event, state) ->
   if @clickedBlock?
     @clickedBlock = null
     @clickedPoint = null
+
+    @handleTextInputMouseUp()
 
 Editor::wouldDelete = (position) ->
 
@@ -2333,17 +2335,15 @@ Editor::setTextInputHead = (point) ->
 # selections and focus text inputs
 # if we apply.
 
-Editor::handleTextInputClick = (mainPoint, dropletDocument) ->
+Editor::handleTextInputMouseDown = (mainPoint, dropletDocument) ->
   hitTestResult = @hitTestTextInput mainPoint, dropletDocument
 
-  # If they have clicked a socket,
-  # focus it.
+  # If they have clicked a socket, set a flag to focus on mouseup.
   if hitTestResult?
     unless hitTestResult is @getCursor()
       if hitTestResult.editable()
-        @undoCapture()
-        @setCursor hitTestResult
-        @redrawMain()
+        @socketToFocus = hitTestResult
+        return false
 
       if hitTestResult.hasDropdown() and ((not hitTestResult.editable()) or
           mainPoint.x - @view.getViewNodeFor(hitTestResult).bounds[0].x < helper.DROPDOWN_ARROW_WIDTH)
@@ -2374,6 +2374,13 @@ Editor::handleTextInputClick = (mainPoint, dropletDocument) ->
     return true
   else
     return false
+
+Editor::handleTextInputMouseUp = ->
+  if @socketToFocus
+    @undoCapture()
+    @setCursor @socketToFocus
+    @redrawMain()
+  @socketToFocus = null
 
 # Convenience hit-testing function
 Editor::hitTestTextInputInPalette = (point, block) ->
