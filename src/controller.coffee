@@ -534,7 +534,8 @@ Editor::redrawMain = (opts = {}) ->
       @mainCtx.restore()
 
     # Draw the cursor (if exists, and is inserted)
-    @redrawCursors(); @redrawHighlights()
+    @redrawCursors()
+    @redrawHighlights()
     @resizeGutter()
 
     for binding in editorBindings.redraw_main
@@ -1124,11 +1125,10 @@ hook 'mousedown', 1, (point, event, state) ->
   mainPoint = @trackerPointToMain(point)
 
   for dropletDocument, i in @getDocuments() by -1
-    # First attempt handling text input
-    if @handleTextInputClick mainPoint, dropletDocument
-      state.consumedHitTest = true
-      return
-    else if @cursor.document is i and @cursorAtSocket()
+    # Set @textInputToFocusOnMouseUp in case the user release the mouse without dragging
+    @maybeHandleTextInputClick mainPoint, dropletDocument
+
+    if @cursor.document is i and @cursorAtSocket()
       @setCursor @cursor, ((token) -> token.type isnt 'socketStart')
 
     hitTestResult = @hitTest mainPoint, dropletDocument
@@ -1151,7 +1151,7 @@ hook 'mousedown', 1, (point, event, state) ->
       @clickedBlockPaletteEntry = null
 
       # Move the cursor somewhere nearby
-      @setCursor @clickedBlock.start.next
+      @setCursor @clickedBlock.end
 
       # Record the point at which is was clicked (for clickedBlock->draggingBlock)
       @clickedPoint = point
@@ -1214,6 +1214,10 @@ hook 'mouseup', 0, (point, event, state) ->
   if @clickedBlock?
     @clickedBlock = null
     @clickedPoint = null
+
+    if @textInputToFocusOnMouseUp
+      @handleTextInputClick()
+      @textInputToFocusOnMouseUp = null
 
 Editor::wouldDelete = (position) ->
 
@@ -1442,8 +1446,6 @@ hook 'mousemove', 0, (point, event, state) ->
 
       # Update highlight if necessary.
       if best isnt @lastHighlight
-        # TODO if this becomes a performance issue,
-        # pull the drop highlights out into a new canvas.
         @redrawHighlights()
 
         if best?
@@ -1574,7 +1576,7 @@ hook 'mouseup', 1, (point, event, state) ->
         rememberedSocketOffsets.forEach (x) ->
           x.offset += 1
 
-      futureCursorLocation = @toCrossDocumentLocation @draggingBlock.start
+      futureCursorLocation = @toCrossDocumentLocation @draggingBlock.end
 
       # Reparse the parent if we are
       # in a socket
@@ -2329,51 +2331,51 @@ Editor::setTextInputHead = (point) ->
   @textInputHead = @getTextPosition point
   @hiddenInput.setSelectionRange Math.min(@textInputAnchor, @textInputHead), Math.max(@textInputAnchor, @textInputHead)
 
+Editor::maybeHandleTextInputClick = (mainPoint, dropletDocument) ->
+  hitTestResult = @hitTestTextInput mainPoint, dropletDocument
+  if hitTestResult?
+
+    @textInputToFocusOnMouseUp = {point: mainPoint, socket: hitTestResult}
+
 # On mousedown, we will want to start
 # selections and focus text inputs
 # if we apply.
 
-Editor::handleTextInputClick = (mainPoint, dropletDocument) ->
-  hitTestResult = @hitTestTextInput mainPoint, dropletDocument
+Editor::handleTextInputClick = ->
+  mainPoint = @textInputToFocusOnMouseUp.point
+  hitTestResult = @textInputToFocusOnMouseUp.socket
+  unless hitTestResult is @getCursor()
+    if hitTestResult.editable()
+      hitTestResult.selected = true
+      @undoCapture()
+      @setCursor hitTestResult
+      @redrawMain()
 
-  # If they have clicked a socket,
-  # focus it.
-  if hitTestResult?
-    unless hitTestResult is @getCursor()
-      if hitTestResult.editable()
-        @undoCapture()
-        @setCursor hitTestResult
-        @redrawMain()
+    if hitTestResult.hasDropdown() and ((not hitTestResult.editable()) or
+        mainPoint.x - @view.getViewNodeFor(hitTestResult).bounds[0].x < helper.DROPDOWN_ARROW_WIDTH)
+      @showDropdown hitTestResult
 
-      if hitTestResult.hasDropdown() and ((not hitTestResult.editable()) or
-          mainPoint.x - @view.getViewNodeFor(hitTestResult).bounds[0].x < helper.DROPDOWN_ARROW_WIDTH)
-        @showDropdown hitTestResult
+    @textInputSelecting = false
 
-      @textInputSelecting = false
-
-    else
-      if @getCursor().hasDropdown() and
-          mainPoint.x - @view.getViewNodeFor(hitTestResult).bounds[0].x < helper.DROPDOWN_ARROW_WIDTH
-        @showDropdown()
-
-      @setTextInputAnchor mainPoint
-      @redrawTextInput()
-
-      @textInputSelecting = true
-
-    # Now that we have focused the text element
-    # in the Droplet model, focus the hidden input.
-    #
-    # It is important that this be done after the Droplet model
-    # has focused its text element, because
-    # the hidden input moves on the focus() event to
-    # the currently-focused Droplet element to make
-    # mobile screen scroll properly.
-    @hiddenInput.focus()
-
-    return true
   else
-    return false
+    if @getCursor().hasDropdown() and
+        mainPoint.x - @view.getViewNodeFor(hitTestResult).bounds[0].x < helper.DROPDOWN_ARROW_WIDTH
+      @showDropdown()
+
+    @setTextInputAnchor mainPoint
+    @redrawTextInput()
+
+    @textInputSelecting = true
+
+  # Now that we have focused the text element
+  # in the Droplet model, focus the hidden input.
+  #
+  # It is important that this be done after the Droplet model
+  # has focused its text element, because
+  # the hidden input moves on the focus() event to
+  # the currently-focused Droplet element to make
+  # mobile screen scroll properly.
+  @hiddenInput.focus()
 
 # Convenience hit-testing function
 Editor::hitTestTextInputInPalette = (point, block) ->

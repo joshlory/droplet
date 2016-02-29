@@ -1918,9 +1918,12 @@ exports.View = class View
       if '' is @model.emptyString and @model.start?.next is @model.end
         # Empty sockets with empty emptyString defaults are transparent
         @path.style.fillColor = @path.style.strokeColor = 'rgba(0,0,0,0)'
-      else
+      else if @model.selected
         # Make ourselves white, with a white border.
         @path.style.fillColor = @path.style.strokeColor = '#FFF'
+      else
+        # Make ourselves a lighter version of our parent block's color.
+        @path.style.fillColor = @path.style.strokeColor = avgColor '#FFF', 0.7, @view.getColor @model.parent.color
 
       return @path
 
