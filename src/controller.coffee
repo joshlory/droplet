@@ -2342,7 +2342,7 @@ Editor::handleTextInputMouseDown = (mainPoint, dropletDocument) ->
   if hitTestResult?
     unless hitTestResult is @getCursor()
       if hitTestResult.editable()
-        @socketToFocus = hitTestResult
+        @socketToFocus = @toCrossDocumentLocation hitTestResult
         return false
 
       if hitTestResult.hasDropdown() and ((not hitTestResult.editable()) or
@@ -2378,7 +2378,7 @@ Editor::handleTextInputMouseDown = (mainPoint, dropletDocument) ->
 Editor::handleTextInputMouseUp = ->
   if @socketToFocus
     @undoCapture()
-    @setCursor @socketToFocus
+    @setCursor @fromCrossDocumentLocation @socketToFocus
     @redrawMain()
   @socketToFocus = null
 
